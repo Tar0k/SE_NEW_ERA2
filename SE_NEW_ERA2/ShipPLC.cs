@@ -1,6 +1,6 @@
-﻿using System.Collections;
-using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
+using VRageMath;
 
 namespace SE_NEW_ERA2;
 
@@ -35,11 +35,60 @@ public sealed class Program: MyGridProgram
         Runtime.UpdateFrequency = UpdateFrequency.Update100;
     }
     
+    internal class LightSystem
+    {
+        private readonly List<IMyInteriorLight> _lights;
+
+        public LightSystem(IEnumerable<IMyTerminalBlock> blocks)
+        {
+            _lights = blocks.OfType<IMyInteriorLight>().ToList();
+            Default();
+        }
+
+        public void TurnOn()
+        {
+            foreach (var light in  _lights)
+            {
+                light.Enabled = light.Enabled == false;
+            }
+        }
+
+        public void TurnOff()
+        {
+            foreach (var light in  _lights)
+            {
+                light.Enabled = light.Enabled != true;
+            }
+        }
+
+        public void AlarmOn()
+        {
+            foreach (var light in _lights)
+            {
+                light.Color = Color.Red;
+                light.BlinkLength = 3;
+            }
+        }
+
+        public void AlarmOff() => Default();
+
+        public void Default()
+        {
+            foreach (var light in _lights)
+            {
+                light.Color = Color.White;
+                light.BlinkLength = 0;
+            }
+        }
+    }
+    
+    
     internal class Airlock
     {
         private readonly IEnumerable<IMyTerminalBlock> _airLockBlocks;
+        
+        private readonly LightSystem _lightSystem;
         private readonly IEnumerable<IMyTextPanel> _displays;
-        private readonly IEnumerable<IMyInteriorLight> _lights;
         private readonly IEnumerable<IMySensorBlock> _sensors;
         private readonly IEnumerable<IMyAirVent> _airVents;
         private readonly IEnumerable<IMyDoor> _externalDoors;
@@ -50,8 +99,8 @@ public sealed class Program: MyGridProgram
         {
             _airLockBlocks = blocks.Where(b => b.CustomData.ToLower().StartsWith(name.ToLower())).ToList();
             
+            _lightSystem = new LightSystem(_airLockBlocks);
             _displays = _airLockBlocks.OfType<IMyTextPanel>();
-            _lights = _airLockBlocks.OfType<IMyInteriorLight>();
             _sensors = _airLockBlocks.OfType<IMySensorBlock>();
             _airVents = _airLockBlocks.OfType<IMyAirVent>();
             
