@@ -61,6 +61,17 @@ public sealed class Program: MyGridProgram
             }
         }
 
+        public void WarningOn()
+        {
+            foreach (var light in _lights)
+            {
+                light.Color = Color.Yellow;
+                light.BlinkLength = 3;
+            }
+        }
+
+        public void WarningOff() => Default();
+
         public void AlarmOn()
         {
             foreach (var light in _lights)
@@ -93,6 +104,15 @@ public sealed class Program: MyGridProgram
         private readonly IEnumerable<IMyAirVent> _airVents;
         private readonly IEnumerable<IMyDoor> _externalDoors;
         private readonly IEnumerable<IMyDoor> _internalDoors;
+
+        internal enum AirlockStatus
+        {
+            Depressurized,
+            Depressurizing,
+            Pressurized,
+            Pressurizing,
+            Unknown
+        }
         
 
         public Airlock(IEnumerable<IMyTerminalBlock> blocks, string name = "Airlock")
@@ -109,8 +129,45 @@ public sealed class Program: MyGridProgram
             _internalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("internal"));
         }
 
-        public override string ToString() => string.Join("\n", _airLockBlocks.Select(ab => ab.CustomName));
+        public AirlockStatus Status
+        {
+            get
+            {
+                if (_airVents.All(av => av.Status == VentStatus.Depressurized)) return AirlockStatus.Depressurized;
+                if (_airVents.All(av => av.Status == VentStatus.Depressurizing)) return AirlockStatus.Depressurizing;
+                if (_airVents.All(av => av.Status == VentStatus.Pressurized)) return AirlockStatus.Pressurized;
+                if (_airVents.All(av => av.Status == VentStatus.Pressurizing)) return AirlockStatus.Pressurizing;
+                return AirlockStatus.Unknown;
+            }
+        }
 
+        private void ShowStatus()
+        {
+            switch (Status)
+            {
+                case AirlockStatus.Depressurized:
+                    _lightSystem.WarningOff();
+                    break;
+                case AirlockStatus.Depressurizing:
+                    _lightSystem.WarningOn();
+                    break;
+                case AirlockStatus.Pressurizing:
+                    _lightSystem.WarningOn();
+                    break;
+                case AirlockStatus.Pressurized:
+                    _lightSystem.WarningOff();
+                    break;
+                case AirlockStatus.Unknown:
+                    _lightSystem.AlarmOn();
+                    break;
+                default:
+                    _lightSystem.Default();
+                    break;
+            }
+        }
+
+        public override string ToString() => string.Join("\n", _airLockBlocks.Select(ab => ab.CustomName));
+        
     }
     
     public void Save()
