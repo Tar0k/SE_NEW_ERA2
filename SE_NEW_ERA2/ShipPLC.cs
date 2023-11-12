@@ -7,10 +7,7 @@ namespace SE_NEW_ERA2;
 public sealed class Program: MyGridProgram
 {
     // BEGIN COPY
-    
-    private readonly List<IMyTerminalBlock> _allBlocks = new List<IMyTerminalBlock>();
     private readonly IMyTextSurface _plcScreen;
-    private readonly Airlock _airlock1;
 
 
     internal class CoreSystem
