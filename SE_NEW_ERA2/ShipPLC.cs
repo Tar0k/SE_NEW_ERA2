@@ -1,5 +1,8 @@
-﻿using Sandbox.ModAPI.Ingame;
+﻿using System.Collections;
+using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
+using VRage.Game.GUI.TextPanel;
+using VRage.Game.ObjectBuilders.Components.Contracts;
 using VRageMath;
 
 namespace SE_NEW_ERA2;
@@ -8,12 +11,12 @@ public sealed class Program: MyGridProgram
 {
     // BEGIN COPY
     private readonly IMyTextSurface _plcScreen;
-
+    internal readonly CoreSystem _coreSystem;
 
     internal class CoreSystem
     {
         private readonly List<IMyTerminalBlock> _allBlocks = new List<IMyTerminalBlock>();
-        private readonly Airlock _airlock1;
+        public readonly Airlock _airlock1;
 
         public CoreSystem(Program program)
         {
@@ -21,16 +24,15 @@ public sealed class Program: MyGridProgram
             _allBlocks = _allBlocks.Where(b => b.IsSameConstructAs(program.Me)).ToList();
             _airlock1 = new Airlock(_allBlocks, "Шлюз 1");
         }
+
+        public void Update()
+        {
+            _airlock1.Update();
+        }
     }
 
-    private readonly CoreSystem _coreSystem;
     
-    public Program()
-    {
-        _coreSystem = new CoreSystem(this);
-        _plcScreen = Me.GetSurface(0);
-        Runtime.UpdateFrequency = UpdateFrequency.Update100;
-    }
+    
     
     internal class LightSystem
     {
@@ -52,10 +54,7 @@ public sealed class Program: MyGridProgram
 
         public void TurnOff()
         {
-            foreach (var light in  _lights)
-            {
-                light.Enabled = light.Enabled != true;
-            }
+            foreach (var light in  _lights) light.Enabled = light.Enabled != true;
         }
 
         public void WarningOn()
@@ -89,82 +88,234 @@ public sealed class Program: MyGridProgram
             }
         }
     }
-    
-    
+
+    internal class DisplaySystem
+    {
+        private readonly List<IMyTextPanel> _displays;
+
+        internal enum DisplayStatus
+        {
+            Normal,
+            Warning,
+            Alarm,
+            Ok,
+            Unknown
+        }
+
+        public DisplaySystem(IEnumerable<IMyTerminalBlock> blocks)
+        {
+            _displays = blocks.OfType<IMyTextPanel>().ToList();
+            Default();
+        }
+
+        public DisplayStatus Status { get; private set; } = DisplayStatus.Unknown;
+
+        public void WriteText(string value, DisplayStatus status = DisplayStatus.Normal, bool append = false)
+        {
+            switch (status)
+            {
+                case DisplayStatus.Normal:
+                    foreach (var display in _displays)
+                    {
+                        display.WriteText(value, append);
+                    }
+                    break;
+                case DisplayStatus.Alarm:
+                    foreach (var display in _displays)
+                    {
+                        display.WriteText(value, append);
+                        display.BackgroundColor = Color.Red;
+                        display.FontColor = Color.White;
+                    }
+                    break;
+                case DisplayStatus.Warning:
+                    foreach (var display in _displays)
+                    {
+                        display.WriteText(value, append);
+                        display.BackgroundColor = Color.Yellow;
+                        display.FontColor = Color.Black;
+                    }
+                    break;
+                case DisplayStatus.Ok:
+                    foreach (var display in _displays)
+                    {
+                        display.WriteText(value, append);
+                        display.BackgroundColor = Color.Green;
+                        display.FontColor = Color.White;
+                    }
+                    break;
+                case DisplayStatus.Unknown:
+                    foreach (var display in _displays)
+                    {
+                        display.WriteText(value, append);
+                        display.BackgroundColor = Color.Red;
+                        display.FontColor = Color.White;
+                    }
+                    break;
+                default:
+                    Default();
+                    break;
+            }
+        }
+
+        private void Default()
+        {
+            foreach (var display in _displays)
+            {
+                display.BackgroundColor = Color.Black;
+                display.FontColor = Color.White;
+                display.FontSize = 1.1f;
+                display.Alignment = TextAlignment.CENTER;
+            }
+        }
+
+        private void Warning()
+        {
+            Status = DisplayStatus.Warning;
+            foreach (var display in _displays)
+            {
+                display.BackgroundColor = Color.Yellow;
+                display.FontColor = Color.Black;
+            }
+        }
+        
+        private void Alarm()
+        {
+            Status = DisplayStatus.Alarm;
+            foreach (var display in _displays)
+            {
+                display.BackgroundColor = Color.Red;
+                display.FontColor = Color.White;
+            }
+        }
+
+        private void Ok()
+        {
+            Status = DisplayStatus.Normal;
+            foreach (var display in _displays)
+            {
+                display.BackgroundColor = Color.Green;
+                display.FontColor = Color.White;
+            }
+        }
+
+    }
+
+
     internal class Airlock
     {
         private readonly IEnumerable<IMyTerminalBlock> _airLockBlocks;
-        
+
         private readonly LightSystem _lightSystem;
-        private readonly IEnumerable<IMyTextPanel> _displays;
+        private readonly DisplaySystem _displaySystem;
         private readonly IEnumerable<IMySensorBlock> _sensors;
-        private readonly IEnumerable<IMyAirVent> _airVents;
+        private readonly IEnumerable<IMyAirVent> _airVentsInternal;
+        private readonly IEnumerable<IMyAirVent> _airVentsExternal;
         private readonly IEnumerable<IMyDoor> _externalDoors;
         private readonly IEnumerable<IMyDoor> _internalDoors;
+        private readonly IEnumerable<IMyButtonPanel> _externalButtonPanels;
 
         internal enum AirlockStatus
         {
             Depressurized,
-            Depressurizing,
+            Balancing,
             Pressurized,
-            Pressurizing,
             Unknown
         }
-        
+
+        public string Name { get; }
 
         public Airlock(IEnumerable<IMyTerminalBlock> blocks, string name = "Airlock")
         {
+            Name = name;
             _airLockBlocks = blocks.Where(b => b.CustomData.ToLower().StartsWith(name.ToLower())).ToList();
-            
+
             _lightSystem = new LightSystem(_airLockBlocks);
-            _displays = _airLockBlocks.OfType<IMyTextPanel>();
+            _displaySystem = new DisplaySystem(_airLockBlocks);
             _sensors = _airLockBlocks.OfType<IMySensorBlock>();
-            _airVents = _airLockBlocks.OfType<IMyAirVent>();
-            
+            _airVentsExternal = _airLockBlocks.OfType<IMyAirVent>()
+                .Where(av => av.CustomData.ToLower().EndsWith("external"));
+            _airVentsInternal = _airLockBlocks.OfType<IMyAirVent>()
+                .Where(av => av.CustomData.ToLower().EndsWith("internal"));
+
             var doors = _airLockBlocks.OfType<IMyDoor>().ToList();
             _externalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("external"));
             _internalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("internal"));
+
+            Update();
         }
 
+        public float OxygenLevelInternal
+        {
+            get
+            {
+                return _airVentsInternal.Sum(av => av.GetOxygenLevel()) / _airVentsInternal.Count();
+            }
+        }
+        
+        public float OxygenLevelExternal
+        {
+            get
+            {
+                return _airVentsExternal.Sum(av => av.GetOxygenLevel()) / _airVentsExternal.Count();
+            }
+        }
+
+        
         public AirlockStatus Status
         {
             get
             {
-                if (_airVents.All(av => av.Status == VentStatus.Depressurized)) return AirlockStatus.Depressurized;
-                if (_airVents.All(av => av.Status == VentStatus.Depressurizing)) return AirlockStatus.Depressurizing;
-                if (_airVents.All(av => av.Status == VentStatus.Pressurized)) return AirlockStatus.Pressurized;
-                if (_airVents.All(av => av.Status == VentStatus.Pressurizing)) return AirlockStatus.Pressurizing;
+                if (OxygenLevelInternal < 0.2f) return AirlockStatus.Depressurized;
+                if (OxygenLevelInternal >= 0.2f && OxygenLevelInternal < 0.8f) return AirlockStatus.Balancing;
+                if (OxygenLevelInternal >= 0.8f) return AirlockStatus.Pressurized;
                 return AirlockStatus.Unknown;
             }
         }
 
-        private void ShowStatus()
+        public void Update()
         {
+            ShowStatus();
+        }
+        
+        public void ShowStatus()
+        {
+            var oxygenLevelInternal = Math.Truncate(OxygenLevelInternal * 100);
+            var oxygenLevelExternal = Math.Truncate(OxygenLevelExternal * 100);
+
+            var infoText = $"{Name}\n" +
+                           $"--Уровень кислорода--\n" +
+                           $" Внутри: {oxygenLevelInternal}% Снаружи: {oxygenLevelExternal}%\n";
             switch (Status)
             {
                 case AirlockStatus.Depressurized:
-                    _lightSystem.WarningOff();
-                    break;
-                case AirlockStatus.Depressurizing:
-                    _lightSystem.WarningOn();
-                    break;
-                case AirlockStatus.Pressurizing:
-                    _lightSystem.WarningOn();
+                    infoText += "Воздух откачан";
+                    _displaySystem.WriteText(infoText, DisplaySystem.DisplayStatus.Warning);
                     break;
                 case AirlockStatus.Pressurized:
-                    _lightSystem.WarningOff();
+                    infoText += "Воздух накачен";
+                    _displaySystem.WriteText(infoText, DisplaySystem.DisplayStatus.Ok);
                     break;
-                case AirlockStatus.Unknown:
-                    _lightSystem.AlarmOn();
+                case AirlockStatus.Balancing:
+                    infoText += "Давление выравнивается";
+                    _displaySystem.WriteText(infoText, DisplaySystem.DisplayStatus.Warning);
                     break;
                 default:
-                    _lightSystem.Default();
+                    infoText += "Статус неопределен";
+                    _displaySystem.WriteText(infoText, DisplaySystem.DisplayStatus.Alarm);
                     break;
             }
         }
 
         public override string ToString() => string.Join("\n", _airLockBlocks.Select(ab => ab.CustomName));
         
+    }
+    
+    public Program()
+    {
+        _coreSystem = new CoreSystem(this);
+        _plcScreen = Me.GetSurface(0);
+        Runtime.UpdateFrequency = UpdateFrequency.Update100;
     }
     
     public void Save()
@@ -181,6 +332,15 @@ public sealed class Program: MyGridProgram
             case UpdateType.Terminal:
                 break;
             case UpdateType.Trigger:
+                switch (argument)
+                {
+                    case "Шлюз 1 requestExternal":
+                        Echo("Что-то запросило вход снаружи");
+                        break;
+                    case "Шлюз 1 requestInternal":
+                        Echo("Что-то запросило вход изнутри");
+                        break;
+                }
                 break;
             case UpdateType.Mod:
                 break;
@@ -191,6 +351,7 @@ public sealed class Program: MyGridProgram
             case UpdateType.Update10:
                 break;
             case UpdateType.Update100:
+                _coreSystem.Update();
                 break;
             case UpdateType.Once:
                 break;
