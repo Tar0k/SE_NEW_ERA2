@@ -1,8 +1,6 @@
-﻿using System.Collections;
-using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using VRage.Game.GUI.TextPanel;
-using VRage.Game.ObjectBuilders.Components.Contracts;
 using VRageMath;
 
 namespace SE_NEW_ERA2;
@@ -12,29 +10,88 @@ public sealed class Program: MyGridProgram
     // BEGIN COPY
     private readonly IMyTextSurface _plcScreen;
     internal readonly CoreSystem _coreSystem;
-
+    
+    
+    
+    
     internal class CoreSystem
     {
         private readonly List<IMyTerminalBlock> _allBlocks = new List<IMyTerminalBlock>();
-        public readonly Airlock _airlock1;
+        public readonly Airlock Airlock1;
 
         public CoreSystem(Program program)
         {
             program.GridTerminalSystem.GetBlocks(_allBlocks);
             _allBlocks = _allBlocks.Where(b => b.IsSameConstructAs(program.Me)).ToList();
-            _airlock1 = new Airlock(_allBlocks, "Шлюз 1");
+            Airlock1 = new Airlock(_allBlocks, "Шлюз 1");
         }
 
         public void Update()
         {
-            _airlock1.Update();
+            Airlock1.Update();
         }
     }
 
-    
-    
-    
-    internal class LightSystem
+
+    internal class DoorSystem
+    {
+        private readonly List<SafeDoor> _safeDoors = new List<SafeDoor>();
+        
+        public DoorSystem(IEnumerable<IMyTerminalBlock> blocks)
+        {
+            var doors = blocks.OfType<IMyDoor>();
+            foreach (var door in doors)
+            {
+                _safeDoors.Add(new SafeDoor(door));
+            }
+        }
+
+        public void Update()
+        {
+            foreach (var safeDoor in _safeDoors)
+            {
+                safeDoor.Update();
+            }
+        }
+
+
+        private class SafeDoor
+        {
+            private readonly IMyDoor _door;
+            private int _openDoorTimer;
+            public SafeDoor(IMyDoor door)
+            {
+                _door = door;
+                Update();
+            }
+
+            public void Update()
+            {
+                switch (_door.Status)
+                {
+                    case DoorStatus.Open:
+                        _openDoorTimer += 1;
+                        break;
+                    case DoorStatus.Closed:
+                        _openDoorTimer = 0;
+                        break;
+                    case DoorStatus.Opening:
+                        break;
+                    case DoorStatus.Closing:
+                        break;
+                    default:
+                        break;
+                }
+                if (_openDoorTimer <= 1) return;
+                _openDoorTimer = 0;
+                _door.CloseDoor();
+            }
+        
+        
+        }
+    }
+
+    private class LightSystem
     {
         private readonly List<IMyInteriorLight> _lights;
 
@@ -79,7 +136,7 @@ public sealed class Program: MyGridProgram
 
         public void AlarmOff() => Default();
 
-        public void Default()
+        private void Default()
         {
             foreach (var light in _lights)
             {
@@ -211,9 +268,11 @@ public sealed class Program: MyGridProgram
         private readonly IEnumerable<IMySensorBlock> _sensors;
         private readonly IEnumerable<IMyAirVent> _airVentsInternal;
         private readonly IEnumerable<IMyAirVent> _airVentsExternal;
-        private readonly IEnumerable<IMyDoor> _externalDoors;
-        private readonly IEnumerable<IMyDoor> _internalDoors;
-        private readonly IEnumerable<IMyButtonPanel> _externalButtonPanels;
+        private readonly DoorSystem _externalDoors;
+        private readonly DoorSystem _internalDoors;
+
+        private bool _inProgress;
+        private bool step1;
 
         internal enum AirlockStatus
         {
@@ -239,8 +298,11 @@ public sealed class Program: MyGridProgram
                 .Where(av => av.CustomData.ToLower().EndsWith("internal"));
 
             var doors = _airLockBlocks.OfType<IMyDoor>().ToList();
-            _externalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("external"));
-            _internalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("internal"));
+            var externalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("external"));
+            var internalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("internal"));
+
+            _externalDoors = new DoorSystem(externalDoors);
+            _internalDoors = new DoorSystem(internalDoors);
 
             Update();
         }
@@ -275,10 +337,12 @@ public sealed class Program: MyGridProgram
 
         public void Update()
         {
+            _externalDoors.Update();
+            _internalDoors.Update();
             ShowStatus();
         }
         
-        public void ShowStatus()
+        private void ShowStatus()
         {
             var oxygenLevelInternal = Math.Truncate(OxygenLevelInternal * 100);
             var oxygenLevelExternal = Math.Truncate(OxygenLevelExternal * 100);
@@ -306,7 +370,8 @@ public sealed class Program: MyGridProgram
                     break;
             }
         }
-
+        
+        
         public override string ToString() => string.Join("\n", _airLockBlocks.Select(ab => ab.CustomName));
         
     }
