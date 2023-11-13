@@ -6,7 +6,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>disable</Nullable>
         <DockerDefaultTargetOS>Windows</DockerDefaultTargetOS>
-        <LangVersion>10</LangVersion>
+        <LangVersion>6</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>

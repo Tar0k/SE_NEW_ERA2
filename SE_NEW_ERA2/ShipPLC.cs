@@ -3,8 +3,6 @@ using SpaceEngineers.Game.ModAPI.Ingame;
 using VRage.Game.GUI.TextPanel;
 using VRageMath;
 
-namespace SE_NEW_ERA2;
-
 public sealed class Program: MyGridProgram
 {
     // BEGIN COPY
@@ -33,17 +31,26 @@ public sealed class Program: MyGridProgram
     }
 
 
-    internal class DoorSystem
+    internal class SafeDoorSystem
     {
         private readonly List<SafeDoor> _safeDoors = new List<SafeDoor>();
         
-        public DoorSystem(IEnumerable<IMyTerminalBlock> blocks)
+        public SafeDoorSystem(IEnumerable<IMyTerminalBlock> blocks)
         {
             var doors = blocks.OfType<IMyDoor>();
             foreach (var door in doors)
             {
                 _safeDoors.Add(new SafeDoor(door));
             }
+        }
+        
+        internal enum SafeDoorsStatus
+        {
+            Closed,
+            Open,
+            Closing,
+            Opening,
+            Unknown
         }
 
         public void Update()
@@ -54,6 +61,32 @@ public sealed class Program: MyGridProgram
             }
         }
 
+        public bool Enabled
+        {
+            get
+            {
+                return _safeDoors.All(sd => sd.Enabled);
+            }
+            set
+            {
+                _safeDoors.ForEach(sd => sd.Enabled = value);
+            } 
+        }
+
+        public SafeDoorsStatus DoorsStatus
+        {
+            get
+            {
+                if (_safeDoors.All(sd => sd.DoorStatus == DoorStatus.Closed)) return SafeDoorsStatus.Closed;
+                if (_safeDoors.All(sd => sd.DoorStatus == DoorStatus.Open)) return SafeDoorsStatus.Open;
+                if (_safeDoors.Any(sd => sd.DoorStatus == DoorStatus.Closing)) return SafeDoorsStatus.Closing;
+                if (_safeDoors.Any(sd => sd.DoorStatus == DoorStatus.Opening)) return SafeDoorsStatus.Opening;
+                return SafeDoorsStatus.Unknown;
+            }
+        }
+        
+        public void OpenDoors() => _safeDoors.ForEach(d => d.OpenDoor());
+        public void CloseDoors() => _safeDoors.ForEach(d => d.CloseDoor());
 
         private class SafeDoor
         {
@@ -86,8 +119,22 @@ public sealed class Program: MyGridProgram
                 _openDoorTimer = 0;
                 _door.CloseDoor();
             }
-        
-        
+            
+            public DoorStatus DoorStatus => _door.Status;
+            public void OpenDoor() => _door.OpenDoor();
+            public void CloseDoor() => _door.CloseDoor();
+            public void ToggleDoor() => _door.ToggleDoor();
+            public bool Enabled
+            {
+                get
+                {
+                    return _door.Enabled;
+                }
+                set
+                { 
+                    _door.Enabled = value;
+                }
+            }
         }
     }
 
@@ -268,8 +315,8 @@ public sealed class Program: MyGridProgram
         private readonly IEnumerable<IMySensorBlock> _sensors;
         private readonly IEnumerable<IMyAirVent> _airVentsInternal;
         private readonly IEnumerable<IMyAirVent> _airVentsExternal;
-        private readonly DoorSystem _externalDoors;
-        private readonly DoorSystem _internalDoors;
+        private readonly SafeDoorSystem _externalSafeDoors;
+        private readonly SafeDoorSystem _internalSafeDoors;
 
         private bool _inProgress;
         private bool step1;
@@ -301,8 +348,8 @@ public sealed class Program: MyGridProgram
             var externalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("external"));
             var internalDoors = doors.Where(d => d.CustomData.ToLower().EndsWith("internal"));
 
-            _externalDoors = new DoorSystem(externalDoors);
-            _internalDoors = new DoorSystem(internalDoors);
+            _externalSafeDoors = new SafeDoorSystem(externalDoors);
+            _internalSafeDoors = new SafeDoorSystem(internalDoors);
 
             Update();
         }
@@ -337,8 +384,8 @@ public sealed class Program: MyGridProgram
 
         public void Update()
         {
-            _externalDoors.Update();
-            _internalDoors.Update();
+            _externalSafeDoors.Update();
+            _internalSafeDoors.Update();
             ShowStatus();
         }
         
