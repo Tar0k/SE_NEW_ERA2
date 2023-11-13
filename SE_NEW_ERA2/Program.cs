@@ -1,8 +1,11 @@
-﻿class Zaglushka
+﻿namespace SE_NEW_ERA2
 {
-    static void Main(string[] args)
+    class Zaglushka
     {
-        // Display the number of command line arguments.
-        Console.WriteLine(args.Length);
+        static void Main(string[] args)
+        {
+            // Display the number of command line arguments.
+            Console.WriteLine(args.Length);
+        }
     }
 }
