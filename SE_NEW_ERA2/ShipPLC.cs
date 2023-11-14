@@ -317,9 +317,8 @@ namespace SE_NEW_ERA2
             private readonly IEnumerable<IMyAirVent> _airVentsExternal;
             private readonly SafeDoorSystem _externalSafeDoors;
             private readonly SafeDoorSystem _internalSafeDoors;
-
-            private bool _inProgress;
-            private bool step1;
+            
+            private int stepExternal;
 
             private enum AirlockStatus
             {
@@ -387,6 +386,66 @@ namespace SE_NEW_ERA2
                 _externalSafeDoors.Update();
                 _internalSafeDoors.Update();
                 ShowStatus();
+            }
+
+            private void RequestExternal()
+            {
+                if (stepExternal == 0 || _sensors.Any(s => s.DetectPlayers)) return;
+                stepExternal = 1;
+            }
+
+            private void Step1External()
+            {
+                _internalSafeDoors.CloseDoors();
+                if (Math.Abs(OxygenLevelInternal - OxygenLevelExternal) < 0.01)
+                {
+                    _externalSafeDoors.OpenDoors();
+                    stepExternal = 2;
+                }
+                else
+                {
+                    _airVentsInternal.ForEach(av => av.Depressurize = true);
+                }
+            }
+
+            private void Step2External()
+            {
+                if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Open) return;
+                stepExternal = 3;
+            }
+
+            private void Step3External()
+            {
+                if (_sensors.Any(s => s.DetectPlayers)) return;
+                _externalSafeDoors.CloseDoors();
+                _internalSafeDoors.CloseDoors();
+                stepExternal = 4;
+            }
+
+            private void Step4External()
+            {
+                if (Status == AirlockStatus.Pressurized)
+                {
+                    _internalSafeDoors.OpenDoors();
+                    stepExternal = 5;
+                }
+                else
+                {
+                    _airVentsInternal.ForEach(av => av.Depressurize = false);
+                }
+            }
+
+            private void Step5External()
+            {
+                if (!_sensors.Any(s => s.DetectPlayers) && _internalSafeDoors.DoorsStatus == SafeDoorSystem.SafeDoorsStatus.Closed)
+                {
+                    stepExternal = 0;
+                }
+            }
+            
+
+            private void RequestInternal()
+            {
             }
         
             private void ShowStatus()
