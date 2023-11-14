@@ -192,7 +192,19 @@ namespace SE_NEW_ERA2
                 }
             }
         }
+        
+        private class SensorSystem
+        {
+            private readonly List<IMySensorBlock> _sensors;
 
+            public SensorSystem(IEnumerable<IMyTerminalBlock> blocks)
+            {
+                _sensors = blocks.OfType<IMySensorBlock>().ToList();
+            }
+
+            public bool DetectPlayers() => _sensors.Any(s => s.DetectPlayers);
+        }
+        
         internal class DisplaySystem
         {
             private readonly List<IMyTextPanel> _displays;
@@ -312,13 +324,13 @@ namespace SE_NEW_ERA2
 
             private readonly LightSystem _lightSystem;
             private readonly DisplaySystem _displaySystem;
-            private readonly IEnumerable<IMySensorBlock> _sensors;
+            private readonly SensorSystem _sensorSystem;
             private readonly IEnumerable<IMyAirVent> _airVentsInternal;
             private readonly IEnumerable<IMyAirVent> _airVentsExternal;
             private readonly SafeDoorSystem _externalSafeDoors;
             private readonly SafeDoorSystem _internalSafeDoors;
             
-            private int stepExternal;
+            private int processStep;
 
             private enum AirlockStatus
             {
@@ -337,7 +349,7 @@ namespace SE_NEW_ERA2
 
                 _lightSystem = new LightSystem(_airLockBlocks);
                 _displaySystem = new DisplaySystem(_airLockBlocks);
-                _sensors = _airLockBlocks.OfType<IMySensorBlock>();
+                _sensorSystem = new SensorSystem(_airLockBlocks);
                 _airVentsExternal = _airLockBlocks.OfType<IMyAirVent>()
                     .Where(av => av.CustomData.ToLower().EndsWith("external"));
                 _airVentsInternal = _airLockBlocks.OfType<IMyAirVent>()
@@ -388,63 +400,20 @@ namespace SE_NEW_ERA2
                 ShowStatus();
             }
 
-            private void RequestExternal()
+            private void RequestEnterExternal()
             {
-                if (stepExternal == 0 || _sensors.Any(s => s.DetectPlayers)) return;
-                stepExternal = 1;
             }
-
-            private void Step1External()
+            
+            private void RequestEnterInternal()
             {
-                _internalSafeDoors.CloseDoors();
-                if (Math.Abs(OxygenLevelInternal - OxygenLevelExternal) < 0.01)
-                {
-                    _externalSafeDoors.OpenDoors();
-                    stepExternal = 2;
-                }
-                else
-                {
-                    _airVentsInternal.ForEach(av => av.Depressurize = true);
-                }
-            }
-
-            private void Step2External()
-            {
-                if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Open) return;
-                stepExternal = 3;
-            }
-
-            private void Step3External()
-            {
-                if (_sensors.Any(s => s.DetectPlayers)) return;
-                _externalSafeDoors.CloseDoors();
-                _internalSafeDoors.CloseDoors();
-                stepExternal = 4;
-            }
-
-            private void Step4External()
-            {
-                if (Status == AirlockStatus.Pressurized)
-                {
-                    _internalSafeDoors.OpenDoors();
-                    stepExternal = 5;
-                }
-                else
-                {
-                    _airVentsInternal.ForEach(av => av.Depressurize = false);
-                }
-            }
-
-            private void Step5External()
-            {
-                if (!_sensors.Any(s => s.DetectPlayers) && _internalSafeDoors.DoorsStatus == SafeDoorSystem.SafeDoorsStatus.Closed)
-                {
-                    stepExternal = 0;
-                }
             }
             
 
-            private void RequestInternal()
+            private void RequestExitExternal()
+            {
+            }
+            
+            private void RequestExitInternal()
             {
             }
         
@@ -507,11 +476,17 @@ namespace SE_NEW_ERA2
                 case UpdateType.Trigger:
                     switch (argument)
                     {
-                        case "Шлюз 1 requestExternal":
-                            Echo("Что-то запросило вход снаружи");
+                        case "Шлюз 1 requestEnterExternal":
+                            Echo("Запрос на вход в шлюз снаружи");
                             break;
-                        case "Шлюз 1 requestInternal":
-                            Echo("Что-то запросило вход изнутри");
+                        case "Шлюз 1 requestEnterInternal":
+                            Echo("Запрос на вход в шлюз изнутри");
+                            break;
+                        case "Шлюз 1 requestExitExternal":
+                            Echo("Запрос на выход из шлюза наружу");
+                            break;
+                        case "Шлюз 1 requestExitInternal":
+                            Echo("Запрос на выход из шлюза внутрь");
                             break;
                     }
                     break;
