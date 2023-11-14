@@ -400,21 +400,62 @@ namespace SE_NEW_ERA2
                 ShowStatus();
             }
 
+            public bool Depressurize
+            {
+                get
+                {
+                    return _airVentsInternal.All(av => av.Depressurize);
+                }
+                set
+                {
+                    _airVentsInternal.ForEach(av => av.Depressurize = value);
+                }
+            }
+
+            public void BalancePressure(float requestedPressure, float currentPressure)
+            {
+                Depressurize = !(requestedPressure >= currentPressure);
+            }
+            
             private void RequestEnterExternal()
             {
+                if (processStep != 0) return;
+                if (_internalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
+                if (OxygenLevelExternal > 0.8 && Status == AirlockStatus.Pressurized)
+                {
+                    _externalSafeDoors.OpenDoors();
+                }
             }
             
             private void RequestEnterInternal()
             {
+                if (processStep != 0) return;
+                if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
+                if (Status == AirlockStatus.Pressurized)
+                {
+                    _internalSafeDoors.OpenDoors();
+                }
             }
             
 
             private void RequestExitExternal()
             {
+                if (processStep != 0) return;
+                if (_internalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
+                if (OxygenLevelExternal > 0.8 && Status == AirlockStatus.Pressurized)
+                {
+                    _externalSafeDoors.OpenDoors();
+                }
             }
             
             private void RequestExitInternal()
             {
+                if (processStep != 0) return;
+                if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
+                if (Status == AirlockStatus.Pressurized)
+                {
+                    _internalSafeDoors.OpenDoors();
+                }
             }
         
             private void ShowStatus()
