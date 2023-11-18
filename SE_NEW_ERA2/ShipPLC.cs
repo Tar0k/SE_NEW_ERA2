@@ -15,18 +15,18 @@ namespace SE_NEW_ERA2
         private class CoreSystem
         {
             private readonly List<IMyTerminalBlock> _allBlocks = new List<IMyTerminalBlock>();
-            private readonly Airlock _airlock1;
+            public readonly Airlock Airlock1;
 
             public CoreSystem(MyGridProgram program)
             {
                 program.GridTerminalSystem.GetBlocks(_allBlocks);
                 _allBlocks = _allBlocks.Where(b => b.IsSameConstructAs(program.Me)).ToList();
-                _airlock1 = new Airlock(_allBlocks, "Шлюз 1");
+                Airlock1 = new Airlock(_allBlocks, "Шлюз 1");
             }
 
             public void Update()
             {
-                _airlock1.Update();
+                Airlock1.Update();
             }
         }
 
@@ -330,7 +330,8 @@ namespace SE_NEW_ERA2
             private readonly SafeDoorSystem _externalSafeDoors;
             private readonly SafeDoorSystem _internalSafeDoors;
             
-            private int processStep;
+            private bool processExternalInProgress;
+            private bool processInternalInProgress;
 
             private enum AirlockStatus
             {
@@ -361,7 +362,7 @@ namespace SE_NEW_ERA2
 
                 _externalSafeDoors = new SafeDoorSystem(externalDoors);
                 _internalSafeDoors = new SafeDoorSystem(internalDoors);
-
+                
                 Update();
             }
 
@@ -397,7 +398,10 @@ namespace SE_NEW_ERA2
             {
                 _externalSafeDoors.Update();
                 _internalSafeDoors.Update();
+                
                 ShowStatus();
+                
+                
             }
 
             public bool Depressurize
@@ -408,55 +412,96 @@ namespace SE_NEW_ERA2
                 }
                 set
                 {
-                    _airVentsInternal.ForEach(av => av.Depressurize = value);
+                    foreach (var airVent in _airVentsInternal)
+                    {
+                        airVent.Depressurize = value;
+                    }
                 }
             }
 
-            public void BalancePressure(float requestedPressure, float currentPressure)
+            private void BalancePressure(AirlockStatus requestedStatus)
             {
-                Depressurize = !(requestedPressure >= currentPressure);
+                switch (requestedStatus)
+                {
+                    case AirlockStatus.Depressurized:
+                        Depressurize = true;
+                        break;
+                    case AirlockStatus.Pressurized:
+                        Depressurize = false;
+                        break;
+                    case AirlockStatus.Balancing:
+                        break;
+                    case AirlockStatus.Unknown:
+                        break;
+                    default:
+                        break;
+                }
             }
             
-            private void RequestEnterExternal()
+            public void RequestExternal()
             {
-                if (processStep != 0) return;
+                if (processInternalInProgress) return;
                 if (_internalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
-                if (OxygenLevelExternal > 0.8 && Status == AirlockStatus.Pressurized)
-                {
-                    _externalSafeDoors.OpenDoors();
-                }
-            }
-            
-            private void RequestEnterInternal()
-            {
-                if (processStep != 0) return;
-                if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
-                if (Status == AirlockStatus.Pressurized)
-                {
-                    _internalSafeDoors.OpenDoors();
-                }
-            }
-            
 
-            private void RequestExitExternal()
-            {
-                if (processStep != 0) return;
-                if (_internalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
-                if (OxygenLevelExternal > 0.8 && Status == AirlockStatus.Pressurized)
+                switch (Status)
                 {
-                    _externalSafeDoors.OpenDoors();
+                    case AirlockStatus.Pressurized:
+                        if (OxygenLevelExternal >= 0.8)
+                        {
+                            _externalSafeDoors.OpenDoors();
+                            processExternalInProgress = false;
+                        }
+                        else
+                        {
+                            BalancePressure(AirlockStatus.Depressurized);
+                            processExternalInProgress = true;
+                        }
+                        break;
+                    case AirlockStatus.Depressurized:
+                        if (OxygenLevelExternal <= 0.2)
+                        {
+                            _externalSafeDoors.OpenDoors();
+                            processExternalInProgress = false;
+                        }
+                        else
+                        {
+                            BalancePressure(AirlockStatus.Pressurized);
+                            processExternalInProgress = true;
+                        }
+                        break;
+                    case AirlockStatus.Balancing:
+                        break;
+                    case AirlockStatus.Unknown:
+                        break;
+                    default:
+                        break;
                 }
             }
             
-            private void RequestExitInternal()
+            public void RequestInternal()
             {
-                if (processStep != 0) return;
+                if (processExternalInProgress) return;
                 if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
-                if (Status == AirlockStatus.Pressurized)
+
+                switch (Status)
                 {
-                    _internalSafeDoors.OpenDoors();
+                    case AirlockStatus.Pressurized:
+                        _internalSafeDoors.OpenDoors();
+                        processInternalInProgress = false;
+                        break;
+                    case AirlockStatus.Depressurized:
+                        BalancePressure(AirlockStatus.Pressurized);
+                        processInternalInProgress = true;
+                        break;
+                    case AirlockStatus.Balancing:
+                        break;
+                    case AirlockStatus.Unknown:
+                        break;
+                    default:
+                        break;
                 }
             }
+            
         
             private void ShowStatus()
             {
@@ -517,17 +562,13 @@ namespace SE_NEW_ERA2
                 case UpdateType.Trigger:
                     switch (argument)
                     {
-                        case "Шлюз 1 requestEnterExternal":
+                        case "Шлюз 1 requestExternal":
                             Echo("Запрос на вход в шлюз снаружи");
+                            _coreSystem.Airlock1.RequestExternal();
                             break;
-                        case "Шлюз 1 requestEnterInternal":
+                        case "Шлюз 1 requestInternal":
                             Echo("Запрос на вход в шлюз изнутри");
-                            break;
-                        case "Шлюз 1 requestExitExternal":
-                            Echo("Запрос на выход из шлюза наружу");
-                            break;
-                        case "Шлюз 1 requestExitInternal":
-                            Echo("Запрос на выход из шлюза внутрь");
+                            _coreSystem.Airlock1.RequestInternal();
                             break;
                     }
                     break;
