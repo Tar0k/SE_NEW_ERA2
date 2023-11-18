@@ -399,6 +399,10 @@ namespace SE_NEW_ERA2
                 _externalSafeDoors.Update();
                 _internalSafeDoors.Update();
                 
+                if (processExternalInProgress) RequestExternal();
+                if (processInternalInProgress) RequestInternal();
+                
+                
                 ShowStatus();
                 
                 
@@ -458,7 +462,7 @@ namespace SE_NEW_ERA2
                         }
                         break;
                     case AirlockStatus.Depressurized:
-                        if (OxygenLevelExternal <= 0.2)
+                        if (OxygenLevelExternal < 0.2)
                         {
                             _externalSafeDoors.OpenDoors();
                             processExternalInProgress = false;
