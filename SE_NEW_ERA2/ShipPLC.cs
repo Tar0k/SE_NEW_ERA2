@@ -330,8 +330,8 @@ namespace SE_NEW_ERA2
             private readonly SafeDoorSystem _externalSafeDoors;
             private readonly SafeDoorSystem _internalSafeDoors;
             
-            private bool processExternalInProgress;
-            private bool processInternalInProgress;
+            private bool _processExternalInProgress;
+            private bool _processInternalInProgress;
 
             private enum AirlockStatus
             {
@@ -394,13 +394,21 @@ namespace SE_NEW_ERA2
                 }
             }
 
+            internal bool CanPressurize
+            {
+                get
+                {
+                    return _airVentsInternal.All(av => CanPressurize);
+                }
+            }
+
             public void Update()
             {
                 _externalSafeDoors.Update();
                 _internalSafeDoors.Update();
                 
-                if (processExternalInProgress) RequestExternal();
-                if (processInternalInProgress) RequestInternal();
+                if (_processExternalInProgress) RequestExternal();
+                if (_processInternalInProgress) RequestInternal();
                 
                 
                 ShowStatus();
@@ -444,7 +452,7 @@ namespace SE_NEW_ERA2
             
             public void RequestExternal()
             {
-                if (processInternalInProgress) return;
+                if (_processInternalInProgress) return;
                 if (_internalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
 
                 switch (Status)
@@ -453,24 +461,24 @@ namespace SE_NEW_ERA2
                         if (OxygenLevelExternal >= 0.8)
                         {
                             _externalSafeDoors.OpenDoors();
-                            processExternalInProgress = false;
+                            _processExternalInProgress = false;
                         }
                         else
                         {
                             BalancePressure(AirlockStatus.Depressurized);
-                            processExternalInProgress = true;
+                            _processExternalInProgress = true;
                         }
                         break;
                     case AirlockStatus.Depressurized:
                         if (OxygenLevelExternal < 0.2)
                         {
                             _externalSafeDoors.OpenDoors();
-                            processExternalInProgress = false;
+                            _processExternalInProgress = false;
                         }
                         else
                         {
                             BalancePressure(AirlockStatus.Pressurized);
-                            processExternalInProgress = true;
+                            _processExternalInProgress = true;
                         }
                         break;
                     case AirlockStatus.Balancing:
@@ -484,18 +492,18 @@ namespace SE_NEW_ERA2
             
             public void RequestInternal()
             {
-                if (processExternalInProgress) return;
+                if (_processExternalInProgress) return;
                 if (_externalSafeDoors.DoorsStatus != SafeDoorSystem.SafeDoorsStatus.Closed) return;
 
                 switch (Status)
                 {
                     case AirlockStatus.Pressurized:
                         _internalSafeDoors.OpenDoors();
-                        processInternalInProgress = false;
+                        _processInternalInProgress = false;
                         break;
                     case AirlockStatus.Depressurized:
                         BalancePressure(AirlockStatus.Pressurized);
-                        processInternalInProgress = true;
+                        _processInternalInProgress = true;
                         break;
                     case AirlockStatus.Balancing:
                         break;
@@ -515,6 +523,7 @@ namespace SE_NEW_ERA2
                 var infoText = $"{Name}\n" +
                                $"--Уровень кислорода--\n" +
                                $" Внутри: {oxygenLevelInternal}% Снаружи: {oxygenLevelExternal}%\n";
+                
                 switch (Status)
                 {
                     case AirlockStatus.Depressurized:
